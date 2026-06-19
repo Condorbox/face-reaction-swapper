@@ -1,12 +1,22 @@
 import cv2
+import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision
 
 DETECTION_THRESHOLD = 0.5
 
-# DNN face detector
-net = cv2.dnn.readNetFromCaffe("deploy.prototxt", "res10_300x300_ssd_iter_140000.caffemodel")
+base_options = mp_python.BaseOptions(model_asset_path="face_landmarker.task")
+options = vision.FaceLandmarkerOptions(
+    base_options = base_options,
+    running_mode = vision.RunningMode.VIDEO,
+    num_faces = 1,
+)
+
+landmarker = vision.FaceLandmarker.create_from_options(options)
 
 # Connect to the webcam (0 = default)
 cap = cv2.VideoCapture(0)
+frame_index = 0
 
 while True:
     ret, frame = cap.read()
@@ -15,30 +25,20 @@ while True:
         print("Couldn't read from webcam, exiting.")
         break
 
-    h, w = frame.shape[:2]
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
-    # 300x300 is the input size the model was trained on
-    # (104, 117, 123) are the mean BGR values subtracted for normalisation
-    blob = cv2.dnn.blobFromImage(frame, scalefactor=1.0, size=(300, 300),
-                                 mean=(104, 117, 123))
+    mp_image = mp.Image(image_format = mp.ImageFormat.SRGB, data = rgb_frame)
+    
+    # VIDEO mode wants a timestamp in milliseconds
+    timestamp_ms = int(frame_index * (1000 / 30))  # assuming ~30fps
+    result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    frame_index += 1
 
-    net.setInput(blob)
-    detections = net.forward()
-
-    for i in range(detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
-
-        # filter out weak detections
-        if confidence < DETECTION_THRESHOLD:
-            continue
-
-        # scale the relative coordinates back to pixel coordinates
-        box = detections[0, 0, i, 3:7] * [w, h, w, h]
-        x1, y1, x2, y2 = box.astype(int)
-
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(frame, f"{confidence:.2f}", (x1, y1 - 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    if result.face_landmarks:
+        h, w = frame.shape[:2]
+        for landmark in result.face_landmarks[0]:  # first (only) face
+            x, y = int(landmark.x * w), int(landmark.y * h)
+            cv2.circle(frame, (x, y), 1, (0, 255, 0), -1)
 
     cv2.imshow("Reaction swapper", frame)
 
