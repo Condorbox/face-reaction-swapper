@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
+import time
 
 DETECTION_THRESHOLD = 0.5
 
@@ -34,6 +35,8 @@ LM = {
 }
 # --------------------------------------------------------------------------------------
 
+start_time = time.time()
+
 base_options = mp_python.BaseOptions(model_asset_path="face_landmarker.task")
 options = vision.FaceLandmarkerOptions(
     base_options = base_options,
@@ -59,7 +62,7 @@ while True:
     mp_image = mp.Image(image_format = mp.ImageFormat.SRGB, data = rgb_frame)
     
     # VIDEO mode wants a timestamp in milliseconds
-    timestamp_ms = int(frame_index * (1000 / 30))  # assuming ~30fps
+    timestamp_ms = int((time.time() - start_time) * 1000)
     result = landmarker.detect_for_video(mp_image, timestamp_ms)
     frame_index += 1
 
